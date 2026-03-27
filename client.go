@@ -156,10 +156,11 @@ type headerTransport struct {
 }
 
 func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
 	for k, v := range t.headers {
-		if req.Header.Get(k) == "" {
-			req.Header.Set(k, v)
+		if clone.Header.Get(k) == "" {
+			clone.Header.Set(k, v)
 		}
 	}
-	return t.base.RoundTrip(req)
+	return t.base.RoundTrip(clone)
 }

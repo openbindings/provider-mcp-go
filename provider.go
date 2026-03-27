@@ -178,7 +178,8 @@ func buildHTTPHeaders(bindCtx map[string]any, opts *openbindings.ExecutionOption
 	return headers
 }
 
-// normalizeEndpoint extracts scheme + host from an MCP endpoint URL.
+// normalizeEndpoint extracts scheme + host from an MCP endpoint URL
+// and normalizes it to a stable context store key.
 func normalizeEndpoint(endpoint string) string {
 	endpoint = strings.TrimSpace(endpoint)
 	if endpoint == "" {
@@ -186,7 +187,7 @@ func normalizeEndpoint(endpoint string) string {
 	}
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Host == "" {
-		return endpoint
+		return openbindings.NormalizeContextKey(endpoint)
 	}
-	return u.Scheme + "://" + u.Host
+	return openbindings.NormalizeContextKey(u.Scheme + "://" + u.Host)
 }

@@ -33,6 +33,8 @@ func execute(ctx context.Context, clientVersion string, url string, ref string, 
 		output = executeResource(ctx, clientVersion, url, name, headers)
 	case "prompts":
 		output = executePrompt(ctx, clientVersion, url, name, input, headers)
+	default:
+		return openbindings.FailedOutput(start, "unsupported_entity", fmt.Sprintf("unsupported MCP entity type %q", entityType))
 	}
 
 	output.DurationMs = time.Since(start).Milliseconds()
