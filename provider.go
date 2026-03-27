@@ -62,6 +62,26 @@ func (p *Provider) ExecuteBinding(ctx context.Context, in *openbindings.BindingE
 	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 	defer cancel()
 
+	if in.Store != nil {
+		key := normalizeEndpoint(in.Source.Location)
+		if key != "" {
+			if stored, err := in.Store.Get(ctx, key); err == nil && len(stored) > 0 {
+				if len(in.Context) == 0 {
+					in.Context = stored
+				} else {
+					merged := make(map[string]any, len(stored)+len(in.Context))
+					for k, v := range stored {
+						merged[k] = v
+					}
+					for k, v := range in.Context {
+						merged[k] = v
+					}
+					in.Context = merged
+				}
+			}
+		}
+	}
+
 	headers := buildHTTPHeaders(in.Context, in.Options)
 	result := execute(ctx, p.clientVersion, in.Source.Location, in.Ref, in.Input, headers)
 
@@ -113,14 +133,6 @@ func resolveMCPContext(ctx context.Context, in *openbindings.BindingExecutionInp
 	}
 
 	return true
-}
-
-func (p *Provider) GetContextInfo(_ context.Context, source openbindings.ExecuteSource, _ string) (*openbindings.ContextInfoResult, error) {
-	key := normalizeEndpoint(source.Location)
-	if key == "" {
-		return nil, nil
-	}
-	return &openbindings.ContextInfoResult{Key: key}, nil
 }
 
 func (p *Provider) CreateInterface(ctx context.Context, in *openbindings.CreateInput) (*openbindings.Interface, error) {
