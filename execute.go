@@ -17,7 +17,7 @@ const (
 	RefPrefixPrompts   = "prompts/"
 )
 
-func execute(ctx context.Context, clientVersion string, url string, ref string, input any) *openbindings.ExecuteOutput {
+func execute(ctx context.Context, clientVersion string, url string, ref string, input any, headers map[string]string) *openbindings.ExecuteOutput {
 	start := time.Now()
 
 	entityType, name, err := ParseRef(ref)
@@ -25,15 +25,14 @@ func execute(ctx context.Context, clientVersion string, url string, ref string, 
 		return openbindings.FailedOutput(start, "invalid_ref", err.Error())
 	}
 
-	// ParseRef guarantees entityType is one of "tools", "resources", or "prompts".
 	var output *openbindings.ExecuteOutput
 	switch entityType {
 	case "tools":
-		output = executeTool(ctx, clientVersion, url, name, input)
+		output = executeTool(ctx, clientVersion, url, name, input, headers)
 	case "resources":
-		output = executeResource(ctx, clientVersion, url, name)
+		output = executeResource(ctx, clientVersion, url, name, headers)
 	case "prompts":
-		output = executePrompt(ctx, clientVersion, url, name, input)
+		output = executePrompt(ctx, clientVersion, url, name, input, headers)
 	}
 
 	output.DurationMs = time.Since(start).Milliseconds()
@@ -68,7 +67,7 @@ func ParseRef(ref string) (entityType string, name string, err error) {
 		ref, RefPrefixTools, RefPrefixResources, RefPrefixPrompts)
 }
 
-func executeTool(ctx context.Context, clientVersion string, url string, toolName string, input any) *openbindings.ExecuteOutput {
+func executeTool(ctx context.Context, clientVersion string, url string, toolName string, input any, headers map[string]string) *openbindings.ExecuteOutput {
 	args, ok := openbindings.ToStringAnyMap(input)
 	if input != nil && !ok {
 		return &openbindings.ExecuteOutput{
@@ -84,7 +83,7 @@ func executeTool(ctx context.Context, clientVersion string, url string, toolName
 		args = map[string]any{}
 	}
 
-	result, err := callTool(ctx, clientVersion, url, toolName, args)
+	result, err := callTool(ctx, clientVersion, url, toolName, args, headers)
 	if err != nil {
 		return &openbindings.ExecuteOutput{
 			Status: 1,
@@ -98,8 +97,8 @@ func executeTool(ctx context.Context, clientVersion string, url string, toolName
 	return callToolResultToOutput(result)
 }
 
-func executeResource(ctx context.Context, clientVersion string, url string, uri string) *openbindings.ExecuteOutput {
-	result, err := readResource(ctx, clientVersion, url, uri)
+func executeResource(ctx context.Context, clientVersion string, url string, uri string, headers map[string]string) *openbindings.ExecuteOutput {
+	result, err := readResource(ctx, clientVersion, url, uri, headers)
 	if err != nil {
 		return &openbindings.ExecuteOutput{
 			Status: 1,
@@ -113,7 +112,7 @@ func executeResource(ctx context.Context, clientVersion string, url string, uri 
 	return readResourceResultToOutput(result)
 }
 
-func executePrompt(ctx context.Context, clientVersion string, url string, promptName string, input any) *openbindings.ExecuteOutput {
+func executePrompt(ctx context.Context, clientVersion string, url string, promptName string, input any, headers map[string]string) *openbindings.ExecuteOutput {
 	args, err := toStringStringMap(input)
 	if err != nil {
 		return &openbindings.ExecuteOutput{
@@ -125,7 +124,7 @@ func executePrompt(ctx context.Context, clientVersion string, url string, prompt
 		}
 	}
 
-	result, err := getPrompt(ctx, clientVersion, url, promptName, args)
+	result, err := getPrompt(ctx, clientVersion, url, promptName, args, headers)
 	if err != nil {
 		return &openbindings.ExecuteOutput{
 			Status: 1,

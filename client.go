@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -25,7 +26,7 @@ func clientInfo(version string) *gomcp.Implementation {
 }
 
 func discover(ctx context.Context, clientVersion string, url string) (*Discovery, error) {
-	session, err := connect(ctx, clientVersion, url)
+	session, err := connect(ctx, clientVersion, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("connect to MCP server: %w", err)
 	}
@@ -75,8 +76,8 @@ func discover(ctx context.Context, clientVersion string, url string) (*Discovery
 	return result, nil
 }
 
-func callTool(ctx context.Context, clientVersion string, url string, toolName string, args map[string]any) (*gomcp.CallToolResult, error) {
-	session, err := connect(ctx, clientVersion, url)
+func callTool(ctx context.Context, clientVersion string, url string, toolName string, args map[string]any, headers map[string]string) (*gomcp.CallToolResult, error) {
+	session, err := connect(ctx, clientVersion, url, headers)
 	if err != nil {
 		return nil, fmt.Errorf("connect to MCP server: %w", err)
 	}
@@ -92,8 +93,8 @@ func callTool(ctx context.Context, clientVersion string, url string, toolName st
 	return result, nil
 }
 
-func readResource(ctx context.Context, clientVersion string, url string, uri string) (*gomcp.ReadResourceResult, error) {
-	session, err := connect(ctx, clientVersion, url)
+func readResource(ctx context.Context, clientVersion string, url string, uri string, headers map[string]string) (*gomcp.ReadResourceResult, error) {
+	session, err := connect(ctx, clientVersion, url, headers)
 	if err != nil {
 		return nil, fmt.Errorf("connect to MCP server: %w", err)
 	}
@@ -108,8 +109,8 @@ func readResource(ctx context.Context, clientVersion string, url string, uri str
 	return result, nil
 }
 
-func getPrompt(ctx context.Context, clientVersion string, url string, promptName string, args map[string]string) (*gomcp.GetPromptResult, error) {
-	session, err := connect(ctx, clientVersion, url)
+func getPrompt(ctx context.Context, clientVersion string, url string, promptName string, args map[string]string, headers map[string]string) (*gomcp.GetPromptResult, error) {
+	session, err := connect(ctx, clientVersion, url, headers)
 	if err != nil {
 		return nil, fmt.Errorf("connect to MCP server: %w", err)
 	}
@@ -125,16 +126,40 @@ func getPrompt(ctx context.Context, clientVersion string, url string, promptName
 	return result, nil
 }
 
-func connect(ctx context.Context, clientVersion string, url string) (*gomcp.ClientSession, error) {
+func connect(ctx context.Context, clientVersion string, url string, headers map[string]string) (*gomcp.ClientSession, error) {
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return nil, fmt.Errorf("MCP source location must be an HTTP or HTTPS URL, got %q", url)
 	}
 
 	transport := &gomcp.StreamableClientTransport{Endpoint: url}
+	if len(headers) > 0 {
+		transport.HTTPClient = &http.Client{
+			Transport: &headerTransport{
+				base:    http.DefaultTransport,
+				headers: headers,
+			},
+		}
+	}
+
 	client := gomcp.NewClient(clientInfo(clientVersion), nil)
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		return nil, err
 	}
 	return session, nil
+}
+
+// headerTransport injects extra HTTP headers into every request.
+type headerTransport struct {
+	base    http.RoundTripper
+	headers map[string]string
+}
+
+func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	for k, v := range t.headers {
+		if req.Header.Get(k) == "" {
+			req.Header.Set(k, v)
+		}
+	}
+	return t.base.RoundTrip(req)
 }

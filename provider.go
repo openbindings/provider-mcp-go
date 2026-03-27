@@ -13,6 +13,8 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	openbindings "github.com/openbindings/openbindings-go"
@@ -60,7 +62,65 @@ func (p *Provider) ExecuteBinding(ctx context.Context, in *openbindings.BindingE
 	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
 	defer cancel()
 
-	return execute(ctx, p.clientVersion, in.Source.Location, in.Ref, in.Input), nil
+	headers := buildHTTPHeaders(in.Context, in.Options)
+	result := execute(ctx, p.clientVersion, in.Source.Location, in.Ref, in.Input, headers)
+
+	if result.Error != nil && isMCPAuthError(result.Error) {
+		if resolveMCPContext(ctx, in) {
+			headers = buildHTTPHeaders(in.Context, in.Options)
+			result = execute(ctx, p.clientVersion, in.Source.Location, in.Ref, in.Input, headers)
+		}
+	}
+
+	return result, nil
+}
+
+func isMCPAuthError(e *openbindings.ExecuteError) bool {
+	if e == nil {
+		return false
+	}
+	msg := strings.ToLower(e.Message)
+	return strings.Contains(msg, "401") ||
+		strings.Contains(msg, "unauthorized") ||
+		strings.Contains(msg, "unauthenticated")
+}
+
+func resolveMCPContext(ctx context.Context, in *openbindings.BindingExecutionInput) bool {
+	if in.Callbacks == nil || in.Callbacks.Prompt == nil {
+		return false
+	}
+
+	endpoint := normalizeEndpoint(in.Source.Location)
+	if endpoint == "" {
+		endpoint = in.Source.Location
+	}
+
+	value, err := in.Callbacks.Prompt(ctx, fmt.Sprintf("Enter bearer token for %s", endpoint), &openbindings.PromptOptions{
+		Label:  "bearerToken",
+		Secret: true,
+	})
+	if err != nil || value == "" {
+		return false
+	}
+
+	if in.Context == nil {
+		in.Context = make(map[string]any)
+	}
+	in.Context["bearerToken"] = value
+
+	if in.Store != nil {
+		_ = in.Store.Set(ctx, endpoint, in.Context)
+	}
+
+	return true
+}
+
+func (p *Provider) GetContextInfo(_ context.Context, source openbindings.ExecuteSource, _ string) (*openbindings.ContextInfoResult, error) {
+	key := normalizeEndpoint(source.Location)
+	if key == "" {
+		return nil, nil
+	}
+	return &openbindings.ContextInfoResult{Key: key}, nil
 }
 
 func (p *Provider) CreateInterface(ctx context.Context, in *openbindings.CreateInput) (*openbindings.Interface, error) {
@@ -93,4 +153,40 @@ func (p *Provider) CreateInterface(ctx context.Context, in *openbindings.CreateI
 	}
 
 	return iface, nil
+}
+
+// buildHTTPHeaders constructs HTTP headers from binding context credentials
+// and execution options for the MCP Streamable HTTP transport.
+func buildHTTPHeaders(bindCtx map[string]any, opts *openbindings.ExecutionOptions) map[string]string {
+	headers := map[string]string{}
+
+	if token := openbindings.ContextBearerToken(bindCtx); token != "" {
+		headers["Authorization"] = "Bearer " + token
+	} else if key := openbindings.ContextAPIKey(bindCtx); key != "" {
+		headers["Authorization"] = "ApiKey " + key
+	}
+
+	if opts != nil {
+		for k, v := range opts.Headers {
+			headers[k] = v
+		}
+	}
+
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
+}
+
+// normalizeEndpoint extracts scheme + host from an MCP endpoint URL.
+func normalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return ""
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return endpoint
+	}
+	return u.Scheme + "://" + u.Host
 }
