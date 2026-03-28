@@ -47,7 +47,6 @@ func convertToInterface(discovery *Discovery, sourceLocation string) (*openbindi
 		}
 
 		op := openbindings.Operation{
-			Kind:        openbindings.OperationKindMethod,
 			Description: desc,
 		}
 
@@ -84,7 +83,6 @@ func convertToInterface(discovery *Discovery, sourceLocation string) (*openbindi
 		}
 
 		op := openbindings.Operation{
-			Kind:        openbindings.OperationKindMethod,
 			Description: desc,
 		}
 
@@ -120,7 +118,6 @@ func convertToInterface(discovery *Discovery, sourceLocation string) (*openbindi
 		}
 
 		op := openbindings.Operation{
-			Kind:        openbindings.OperationKindMethod,
 			Description: desc,
 		}
 
@@ -156,7 +153,6 @@ func convertToInterface(discovery *Discovery, sourceLocation string) (*openbindi
 		}
 
 		op := openbindings.Operation{
-			Kind:        openbindings.OperationKindMethod,
 			Description: desc,
 		}
 
