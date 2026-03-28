@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"sort"
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	openbindings "github.com/openbindings/openbindings-go"
@@ -178,6 +179,9 @@ func promptArgsToSchema(args []*gomcp.PromptArgument) map[string]any {
 	var required []string
 
 	for _, arg := range args {
+		if arg == nil {
+			continue
+		}
 		prop := map[string]any{
 			"type": "string",
 		}
@@ -196,6 +200,7 @@ func promptArgsToSchema(args []*gomcp.PromptArgument) map[string]any {
 		"properties": properties,
 	}
 	if len(required) > 0 {
+		sort.Strings(required)
 		schema["required"] = required
 	}
 	return schema
